@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Parser;
 use crossbeam_channel::{select, unbounded};
 use crossterm::{
-    event::{self, Event, KeyEvent},
+    event::{self, Event, KeyEvent, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -64,6 +64,8 @@ fn main() -> Result<()> {
     std::thread::spawn(move || loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false) {
             if let Ok(Event::Key(k)) = event::read() {
+                // Windows fires Press + Release for every key; only act on Press.
+                if k.kind != KeyEventKind::Press { continue; }
                 if key_tx.send(k).is_err() {
                     break;
                 }
