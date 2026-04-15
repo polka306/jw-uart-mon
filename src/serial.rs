@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use crossbeam_channel::{Sender, Receiver, unbounded};
@@ -96,25 +96,11 @@ impl SerialWorker {
     pub fn spawn(initial: SerialConfig, evt_tx: Sender<SerialEvent>) -> Self {
         let (tx_cmd, cmd_rx) = unbounded::<TxCommand>();
         let stop = Arc::new(AtomicBool::new(false));
-        let port: Arc<Mutex<Option<Box<dyn serialport::SerialPort>>>> = Arc::new(Mutex::new(None));
-        let cfg: Arc<Mutex<SerialConfig>> = Arc::new(Mutex::new(initial));
-
-        let rx_handle = {
+        let handle = {
             let stop = stop.clone();
-            let evt_tx = evt_tx.clone();
-            let port = port.clone();
-            let cfg = cfg.clone();
-            thread::spawn(move || rx_loop(stop, evt_tx, port, cfg))
+            thread::spawn(move || io_loop(stop, initial, cmd_rx, evt_tx))
         };
-        let tx_handle = {
-            let stop = stop.clone();
-            let port = port.clone();
-            let cfg = cfg.clone();
-            let evt_tx = evt_tx.clone();
-            thread::spawn(move || tx_loop(stop, cmd_rx, port, cfg, evt_tx))
-        };
-
-        Self { tx_cmd, stop, handles: vec![rx_handle, tx_handle] }
+        Self { tx_cmd, stop, handles: vec![handle] }
     }
     pub fn shutdown(mut self) {
         self.stop.store(true, Ordering::SeqCst);
@@ -125,82 +111,91 @@ impl SerialWorker {
 
 fn try_open(cfg: &SerialConfig) -> Option<Box<dyn serialport::SerialPort>> {
     if cfg.port.as_ref().map_or(true, |s| s.is_empty()) { return None; }
-    build_settings(cfg).open().ok()
+    // Short read timeout so the io_loop can interleave writes responsively.
+    build_settings(cfg).timeout(Duration::from_millis(20)).open().ok()
 }
 
-fn rx_loop(
+fn io_loop(
     stop: Arc<AtomicBool>,
-    evt_tx: Sender<SerialEvent>,
-    port: Arc<Mutex<Option<Box<dyn serialport::SerialPort>>>>,
-    cfg: Arc<Mutex<SerialConfig>>,
-) {
-    let mut buf = [0u8; 4096];
-    let mut was_connected = false;
-    while !stop.load(Ordering::SeqCst) {
-        let need_open = { port.lock().unwrap().is_none() };
-        if need_open {
-            if was_connected {
-                was_connected = false;
-                let _ = evt_tx.send(SerialEvent::Disconnected("closed".into()));
-            }
-            let cur = cfg.lock().unwrap().clone();
-            if let Some(p) = try_open(&cur) {
-                *port.lock().unwrap() = Some(p);
-                was_connected = true;
-                let _ = evt_tx.send(SerialEvent::Connected);
-            } else {
-                thread::sleep(Duration::from_millis(1000));
-                continue;
-            }
-        }
-        let read_res = {
-            let mut guard = port.lock().unwrap();
-            if let Some(p) = guard.as_mut() {
-                Some(p.read(&mut buf))
-            } else {
-                None
-            }
-        };
-        match read_res {
-            Some(Ok(0)) => { thread::sleep(Duration::from_millis(10)); }
-            Some(Ok(n)) => { let _ = evt_tx.send(SerialEvent::RxBytes(buf[..n].to_vec())); }
-            Some(Err(e)) if e.kind() == std::io::ErrorKind::TimedOut => { /* idle */ }
-            Some(Err(e)) => {
-                *port.lock().unwrap() = None;
-                let _ = evt_tx.send(SerialEvent::Disconnected(e.to_string()));
-                thread::sleep(Duration::from_millis(1000));
-            }
-            None => { thread::sleep(Duration::from_millis(50)); }
-        }
-    }
-}
-
-fn tx_loop(
-    stop: Arc<AtomicBool>,
+    initial: SerialConfig,
     cmd_rx: Receiver<TxCommand>,
-    port: Arc<Mutex<Option<Box<dyn serialport::SerialPort>>>>,
-    cfg: Arc<Mutex<SerialConfig>>,
     evt_tx: Sender<SerialEvent>,
 ) {
+    let mut cfg = initial;
+    let mut port: Option<Box<dyn serialport::SerialPort>> = None;
+    let mut buf = [0u8; 4096];
+
     while !stop.load(Ordering::SeqCst) {
-        match cmd_rx.recv_timeout(Duration::from_millis(200)) {
-            Ok(TxCommand::Send(bytes)) => {
-                let mut guard = port.lock().unwrap();
-                if let Some(p) = guard.as_mut() {
-                    if let Err(e) = p.write_all(&bytes) {
-                        *guard = None;
-                        let _ = evt_tx.send(SerialEvent::Disconnected(e.to_string()));
+        // Ensure port is open
+        if port.is_none() {
+            match try_open(&cfg) {
+                Some(p) => {
+                    port = Some(p);
+                    let _ = evt_tx.send(SerialEvent::Connected);
+                }
+                None => {
+                    // Drain pending commands so Shutdown/ChangeConfig/Reconnect still work
+                    match cmd_rx.recv_timeout(Duration::from_millis(1000)) {
+                        Ok(TxCommand::Shutdown) => break,
+                        Ok(TxCommand::ChangeConfig(c)) => cfg = c,
+                        Ok(TxCommand::Reconnect) => {}
+                        Ok(TxCommand::Send(_)) => {}
+                        Err(_) => {}
                     }
+                    continue;
                 }
             }
-            Ok(TxCommand::Reconnect) => { *port.lock().unwrap() = None; }
-            Ok(TxCommand::ChangeConfig(c)) => {
-                *cfg.lock().unwrap() = c;
-                *port.lock().unwrap() = None;
+        }
+
+        // Drain any pending commands without blocking
+        loop {
+            match cmd_rx.try_recv() {
+                Ok(TxCommand::Send(bytes)) => {
+                    if let Some(p) = port.as_mut() {
+                        if let Err(e) = p.write_all(&bytes) {
+                            port = None;
+                            let _ = evt_tx.send(SerialEvent::Disconnected(e.to_string()));
+                            break;
+                        }
+                        let _ = p.flush();
+                    }
+                }
+                Ok(TxCommand::Reconnect) => {
+                    port = None;
+                    let _ = evt_tx.send(SerialEvent::Disconnected("reconnect".into()));
+                    break;
+                }
+                Ok(TxCommand::ChangeConfig(c)) => {
+                    cfg = c;
+                    port = None;
+                    let _ = evt_tx.send(SerialEvent::Disconnected("reconfigure".into()));
+                    break;
+                }
+                Ok(TxCommand::Shutdown) => {
+                    stop.store(true, Ordering::SeqCst);
+                    break;
+                }
+                Err(crossbeam_channel::TryRecvError::Empty) => break,
+                Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                    stop.store(true, Ordering::SeqCst);
+                    break;
+                }
             }
-            Ok(TxCommand::Shutdown) => break,
-            Err(crossbeam_channel::RecvTimeoutError::Timeout) => {}
-            Err(_) => break,
+        }
+        if stop.load(Ordering::SeqCst) { break; }
+        if port.is_none() { continue; }
+
+        // Read with the port's configured short timeout
+        let read_res = port.as_mut().map(|p| p.read(&mut buf));
+        match read_res {
+            Some(Ok(0)) => {}
+            Some(Ok(n)) => { let _ = evt_tx.send(SerialEvent::RxBytes(buf[..n].to_vec())); }
+            Some(Err(e)) if e.kind() == std::io::ErrorKind::TimedOut => {}
+            Some(Err(e)) => {
+                port = None;
+                let _ = evt_tx.send(SerialEvent::Disconnected(e.to_string()));
+            }
+            None => {}
         }
     }
 }
