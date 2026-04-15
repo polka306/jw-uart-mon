@@ -96,7 +96,7 @@ fn main() -> Result<()> {
                         handle_key(&mut app, k, &worker, &log_writer, cfg_path.as_deref());
                     }
                 }
-                recv(tick) -> _ => {}
+                recv(tick) -> _ => { app.tick_rates(); }
             }
         }
         Ok(())

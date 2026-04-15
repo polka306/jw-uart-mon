@@ -38,7 +38,13 @@ fn render_status(f: &mut Frame, app: &AppState, area: Rect) {
             "{} {}-{}{}{} ",
             port, cfg.baud, cfg.data_bits, parity_ch, cfg.stop_bits
         )),
-        Span::raw(format!("| RX:{}B TX:{}B ", app.rx_bytes, app.tx_bytes)),
+        Span::raw(format!(
+            "| RX:{} ({}/s)  TX:{} ({}/s) ",
+            human_bytes(app.rx_bytes as f64),
+            human_bytes(app.rx_rate),
+            human_bytes(app.tx_bytes as f64),
+            human_bytes(app.tx_rate),
+        )),
         Span::raw(format!(
             "| HEX:{} TS:{} LE:{:?}",
             if app.show_hex { "on" } else { "off" },
@@ -116,6 +122,12 @@ fn render_rx(f: &mut Frame, app: &AppState, area: Rect) {
     };
     let block = Block::default().borders(Borders::ALL).title(title);
     f.render_widget(Paragraph::new(out).block(block), area);
+}
+
+fn human_bytes(b: f64) -> String {
+    if b < 1024.0 { format!("{:.0}B", b) }
+    else if b < 1024.0 * 1024.0 { format!("{:.1}KB", b / 1024.0) }
+    else { format!("{:.1}MB", b / (1024.0 * 1024.0)) }
 }
 
 fn render_input(f: &mut Frame, app: &AppState, area: Rect) {

@@ -41,6 +41,11 @@ pub struct AppState {
     pub quit: bool,
     pub rx_bytes: u64,
     pub tx_bytes: u64,
+    pub rx_rate: f64,
+    pub tx_rate: f64,
+    last_rate_ts: Option<std::time::Instant>,
+    last_rate_rx: u64,
+    last_rate_tx: u64,
     pub settings_cursor: usize,
     pub port_cursor: usize,
     pub port_list: Vec<String>,
@@ -75,6 +80,11 @@ impl AppState {
             quit: false,
             rx_bytes: 0,
             tx_bytes: 0,
+            rx_rate: 0.0,
+            tx_rate: 0.0,
+            last_rate_ts: None,
+            last_rate_rx: 0,
+            last_rate_tx: 0,
             settings_cursor: 0,
             port_cursor: 0,
             port_list: Vec::new(),
@@ -111,6 +121,32 @@ impl AppState {
         }
     }
     pub fn scroll_bottom(&mut self) { self.scroll = None; }
+
+    /// Update RX/TX byte-rate estimators. Call from the main loop on each tick;
+    /// only recomputes when at least 500ms has elapsed since the last sample.
+    /// Uses exponential smoothing (alpha = 0.3) for a stable readout.
+    pub fn tick_rates(&mut self) {
+        let now = std::time::Instant::now();
+        let prev = match self.last_rate_ts {
+            Some(t) => t,
+            None => {
+                self.last_rate_ts = Some(now);
+                self.last_rate_rx = self.rx_bytes;
+                self.last_rate_tx = self.tx_bytes;
+                return;
+            }
+        };
+        let dt = now.duration_since(prev).as_secs_f64();
+        if dt < 0.5 { return; }
+        let drx = self.rx_bytes.saturating_sub(self.last_rate_rx) as f64 / dt;
+        let dtx = self.tx_bytes.saturating_sub(self.last_rate_tx) as f64 / dt;
+        let a = 0.3;
+        self.rx_rate = a * drx + (1.0 - a) * self.rx_rate;
+        self.tx_rate = a * dtx + (1.0 - a) * self.tx_rate;
+        self.last_rate_ts = Some(now);
+        self.last_rate_rx = self.rx_bytes;
+        self.last_rate_tx = self.tx_bytes;
+    }
     pub fn macro_by_slot(&self, slot: u8) -> Option<&Macro> {
         self.config.macros.iter().find(|m| m.slot == slot)
     }
