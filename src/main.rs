@@ -392,7 +392,9 @@ fn send_macro(app: &mut AppState, worker: &SerialWorker, lw: &LogWriter, slot: u
             }
         }
     } else {
-        m.payload.clone().into_bytes()
+        let mut v = m.payload.clone().into_bytes();
+        v.extend_from_slice(app.config.serial.line_ending.bytes());
+        v
     };
     app.tx_bytes = app.tx_bytes.saturating_add(bytes.len() as u64);
     let line = LogLine {
