@@ -38,6 +38,7 @@ uart-mon --port COM3 --baud 9600
 | `Ctrl+K` | Macro editor |
 | `Ctrl+G` | Help / keybindings modal |
 | `Ctrl+X` | Toggle HEX TX input |
+| `Ctrl+V` | Paste from clipboard |
 | `Ctrl+F` | Search |
 | `F1`–`F12` | Send macro slot 1–12 |
 | `Esc` | Close modal |

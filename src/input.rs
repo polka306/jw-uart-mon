@@ -45,6 +45,7 @@ pub enum Action {
     PortRefresh,
     PortApply,
     OpenPortPicker,
+    PasteClipboard,
     None,
 }
 
@@ -119,6 +120,7 @@ pub fn map_key(app: &AppState, key: KeyEvent) -> Action {
         (KeyCode::Char('l'), true) => Action::ClearLog,
         (KeyCode::Char('r'), true) => Action::Reconnect,
         (KeyCode::Char('x'), true) => Action::ToggleHexInput,
+        (KeyCode::Char('v'), true) => Action::PasteClipboard,
         (KeyCode::F(n), _) if (1..=12).contains(&n) => Action::SendMacro(n),
         (KeyCode::Enter, _) => Action::SubmitInput,
         (KeyCode::Backspace, _) => Action::InputBackspace,

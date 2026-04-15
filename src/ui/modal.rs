@@ -94,6 +94,7 @@ Global
   Ctrl+H        toggle HEX/ASCII display
   Ctrl+T        toggle timestamps
   Ctrl+X        toggle HEX TX input mode
+  Ctrl+V        paste from clipboard
 
 Input
   Enter         send

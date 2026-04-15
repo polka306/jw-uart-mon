@@ -217,6 +217,18 @@ fn handle_key(
         Action::InputBackspace => {
             app.input.pop();
         }
+        Action::PasteClipboard => {
+            match uart_mon::clipboard::paste() {
+                Ok(text) => {
+                    // Strip newlines so paste doesn't auto-send; user hits Enter.
+                    for c in text.chars().filter(|c| *c != '\n' && *c != '\r') {
+                        app.input.push(c);
+                    }
+                    app.set_notice(NoticeLevel::Info, "pasted from clipboard");
+                }
+                Err(e) => app.set_notice(NoticeLevel::Error, format!("clipboard: {}", e)),
+            }
+        }
         Action::SubmitInput => submit(app, worker, lw),
         Action::SendMacro(slot) => send_macro(app, worker, lw, slot),
         Action::HistoryUp => {
