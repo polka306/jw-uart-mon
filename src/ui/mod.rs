@@ -56,9 +56,11 @@ fn render_status(f: &mut Frame, app: &AppState, area: Rect) {
 fn render_rx(f: &mut Frame, app: &AppState, area: Rect) {
     let height = area.height.saturating_sub(2) as usize;
     let total = app.lines.len();
-    let start = total.saturating_sub(height);
+    let back = app.scroll.unwrap_or(0).min(total.saturating_sub(1));
+    let end = total.saturating_sub(back);
+    let start = end.saturating_sub(height);
     let mut out = Vec::new();
-    for line in app.lines.iter().skip(start) {
+    for line in app.lines.iter().take(end).skip(start) {
         let mut spans: Vec<Span> = Vec::new();
         if app.show_ts {
             spans.push(Span::styled(
@@ -85,7 +87,11 @@ fn render_rx(f: &mut Frame, app: &AppState, area: Rect) {
         }
         out.push(Line::from(spans));
     }
-    let block = Block::default().borders(Borders::ALL).title("RX");
+    let title = match app.scroll {
+        None => "RX".to_string(),
+        Some(n) => format!("RX [scrolled -{} | End=resume]", n),
+    };
+    let block = Block::default().borders(Borders::ALL).title(title);
     f.render_widget(Paragraph::new(out).block(block), area);
 }
 

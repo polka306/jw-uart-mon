@@ -79,6 +79,23 @@ impl AppState {
         self.lines.clear();
         self.scroll = None;
     }
+    /// Scroll up (toward older lines) by `n`. Caps at history top.
+    pub fn scroll_up(&mut self, n: usize) {
+        let cur = self.scroll.unwrap_or(0);
+        let max_back = self.lines.len().saturating_sub(1);
+        self.scroll = Some((cur + n).min(max_back));
+    }
+    /// Scroll down (toward newer lines) by `n`. Reaching 0 resumes follow-bottom.
+    pub fn scroll_down(&mut self, n: usize) {
+        match self.scroll {
+            None => {}
+            Some(cur) => {
+                if cur <= n { self.scroll = None; }
+                else { self.scroll = Some(cur - n); }
+            }
+        }
+    }
+    pub fn scroll_bottom(&mut self) { self.scroll = None; }
     pub fn macro_by_slot(&self, slot: u8) -> Option<&Macro> {
         self.config.macros.iter().find(|m| m.slot == slot)
     }

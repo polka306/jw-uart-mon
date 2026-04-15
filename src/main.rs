@@ -181,7 +181,9 @@ fn handle_key(app: &mut AppState, k: KeyEvent, worker: &SerialWorker, lw: &LogWr
                 }
             }
         }
-        Action::ScrollUp | Action::ScrollDown | Action::ScrollBottom => {}
+        Action::ScrollUp => app.scroll_up(10),
+        Action::ScrollDown => app.scroll_down(10),
+        Action::ScrollBottom => app.scroll_bottom(),
         Action::None => {}
     }
 }
