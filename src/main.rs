@@ -150,6 +150,41 @@ fn handle_key(
     match action {
         Action::Quit => app.quit = true,
         Action::OpenModal(m) => app.modal = m,
+        Action::OpenPortPicker => {
+            app.port_list = uart_mon::serial::list_ports();
+            if let Some(cur) = app.config.serial.port.as_deref() {
+                app.port_cursor = app.port_list.iter().position(|p| p == cur).unwrap_or(0);
+            } else {
+                app.port_cursor = 0;
+            }
+            app.modal = Modal::PortPicker;
+        }
+        Action::PortCursorUp => {
+            let n = app.port_list.len().max(1);
+            if app.port_cursor == 0 { app.port_cursor = n - 1; }
+            else { app.port_cursor -= 1; }
+        }
+        Action::PortCursorDown => {
+            let n = app.port_list.len().max(1);
+            app.port_cursor = (app.port_cursor + 1) % n;
+        }
+        Action::PortRefresh => {
+            app.port_list = uart_mon::serial::list_ports();
+            if app.port_cursor >= app.port_list.len() { app.port_cursor = 0; }
+        }
+        Action::PortApply => {
+            if let Some(p) = app.port_list.get(app.port_cursor).cloned() {
+                app.config.serial.port = Some(p);
+                let _ = worker.tx_cmd.send(TxCommand::ChangeConfig(app.config.serial.clone()));
+                if let Some(path) = cfg_path {
+                    let _ = app.config.save(path);
+                }
+                app.set_notice(NoticeLevel::Info, format!("port -> {}", app.config.serial.port.as_deref().unwrap_or("")));
+                app.modal = Modal::None;
+            } else {
+                app.set_notice(NoticeLevel::Warn, "no ports available");
+            }
+        }
         Action::OpenSearch => {
             app.modal = Modal::Search;
             if app.search.is_none() { app.search = Some(String::new()); }

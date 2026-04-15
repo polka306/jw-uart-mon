@@ -1,6 +1,6 @@
 use ratatui::{
     layout::Rect,
-    widgets::{Block, Borders, Paragraph, Clear, List, ListItem},
+    widgets::{Block, Borders, Paragraph, Clear},
     Frame,
 };
 use crate::app::{AppState, Modal};
@@ -12,14 +12,19 @@ pub fn render(f: &mut Frame, app: &AppState, area: Rect) {
     f.render_widget(Clear, r);
     match app.modal {
         Modal::PortPicker => {
-            let items: Vec<ListItem> = crate::serial::list_ports()
-                .into_iter()
-                .map(ListItem::new)
-                .collect();
-            let list = List::new(items).block(
-                Block::default().borders(Borders::ALL).title("Ports (Esc to close)"),
-            );
-            f.render_widget(list, r);
+            let mut body = String::new();
+            if app.port_list.is_empty() {
+                body.push_str("(no ports detected — press r to refresh)\n");
+            }
+            for (i, p) in app.port_list.iter().enumerate() {
+                let marker = if i == app.port_cursor { "> " } else { "  " };
+                let cur = if Some(p) == app.config.serial.port.as_ref() { "  [current]" } else { "" };
+                body.push_str(&format!("{}{}{}\n", marker, p, cur));
+            }
+            body.push_str("\n↑/↓ select  Enter=connect  r=refresh  Esc=cancel");
+            let para = Paragraph::new(body)
+                .block(Block::default().borders(Borders::ALL).title("Ports"));
+            f.render_widget(para, r);
         }
         Modal::Settings => {
             let c = &app.config.serial;
@@ -119,6 +124,12 @@ Search modal
   type          live filter
   Enter         keep filter
   Esc           cancel & clear
+
+Port picker modal
+  Up/Down       select
+  r             refresh list
+  Enter         connect
+  Esc           cancel
 
 Esc closes any modal.";
             let p = Paragraph::new(body)

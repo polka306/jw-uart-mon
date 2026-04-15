@@ -57,6 +57,12 @@ uart-mon --port COM3 --baud 9600
 - `s` — save to config file
 - `Esc` — close
 
+### Inside Port picker (Ctrl+P)
+- `↑` / `↓` — select port
+- `r` — refresh list
+- `Enter` — connect (applies ChangeConfig and saves)
+- `Esc` — cancel
+
 ### Inside Search (Ctrl+F)
 - type — live-filter RX lines
 - `Enter` — keep filter

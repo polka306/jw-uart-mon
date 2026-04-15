@@ -40,10 +40,25 @@ pub enum Action {
     MacroEditCommit,
     MacroEditCancel,
     MacroSave,
+    PortCursorUp,
+    PortCursorDown,
+    PortRefresh,
+    PortApply,
+    OpenPortPicker,
     None,
 }
 
 pub fn map_key(app: &AppState, key: KeyEvent) -> Action {
+    if app.modal == Modal::PortPicker {
+        return match key.code {
+            KeyCode::Esc => Action::CloseModal,
+            KeyCode::Up => Action::PortCursorUp,
+            KeyCode::Down => Action::PortCursorDown,
+            KeyCode::Char('r') => Action::PortRefresh,
+            KeyCode::Enter => Action::PortApply,
+            _ => Action::None,
+        };
+    }
     if app.modal == Modal::Settings {
         return match key.code {
             KeyCode::Esc => Action::CloseModal,
@@ -94,7 +109,7 @@ pub fn map_key(app: &AppState, key: KeyEvent) -> Action {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     match (key.code, ctrl) {
         (KeyCode::Char('q'), true) => Action::Quit,
-        (KeyCode::Char('p'), true) => Action::OpenModal(Modal::PortPicker),
+        (KeyCode::Char('p'), true) => Action::OpenPortPicker,
         (KeyCode::Char('s'), true) => Action::OpenModal(Modal::Settings),
         (KeyCode::Char('k'), true) => Action::OpenModal(Modal::MacroEditor),
         (KeyCode::Char('g'), true) => Action::OpenModal(Modal::Help),
