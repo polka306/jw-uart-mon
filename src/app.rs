@@ -41,7 +41,14 @@ pub struct AppState {
     pub quit: bool,
     pub rx_bytes: u64,
     pub tx_bytes: u64,
+    pub settings_cursor: usize,
+    pub macro_cursor: usize,
+    pub macro_edit_field: Option<MacroField>,
+    pub macro_edit_buf: String,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MacroField { Name, Payload, HexToggle }
 
 impl AppState {
     pub fn new(config: Config) -> Self {
@@ -66,6 +73,10 @@ impl AppState {
             quit: false,
             rx_bytes: 0,
             tx_bytes: 0,
+            settings_cursor: 0,
+            macro_cursor: 0,
+            macro_edit_field: None,
+            macro_edit_buf: String::new(),
         }
     }
 

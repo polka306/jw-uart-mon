@@ -22,25 +22,48 @@ pub fn render(f: &mut Frame, app: &AppState, area: Rect) {
         }
         Modal::Settings => {
             let c = &app.config.serial;
-            let text = format!(
-                "baud: {}\ndata: {}\nparity: {:?}\nstop: {}\nflow: {:?}\nline ending: {:?}\n\n(read-only in MVP; edit config.toml)",
-                c.baud, c.data_bits, c.parity, c.stop_bits, c.flow, c.line_ending
-            );
-            let p = Paragraph::new(text)
+            let fields = [
+                format!("baud:         {}", c.baud),
+                format!("data bits:    {}", c.data_bits),
+                format!("parity:       {:?}", c.parity),
+                format!("stop bits:    {}", c.stop_bits),
+                format!("flow:         {:?}", c.flow),
+                format!("line ending:  {:?}", c.line_ending),
+            ];
+            let mut body = String::new();
+            for (i, line) in fields.iter().enumerate() {
+                let marker = if i == app.settings_cursor { "> " } else { "  " };
+                body.push_str(&format!("{}{}\n", marker, line));
+            }
+            body.push_str("\n↑/↓ select  ←/→ change  Enter=apply+save  Esc=cancel");
+            let p = Paragraph::new(body)
                 .block(Block::default().borders(Borders::ALL).title("Settings"));
             f.render_widget(p, r);
         }
         Modal::MacroEditor => {
-            let items: Vec<ListItem> = app
-                .config
-                .macros
-                .iter()
-                .map(|m| ListItem::new(format!("F{} {} : {}", m.slot, m.name, m.payload)))
-                .collect();
-            let list = List::new(items).block(
-                Block::default().borders(Borders::ALL).title("Macros (edit config.toml)"),
-            );
-            f.render_widget(list, r);
+            let mut body = String::new();
+            if app.config.macros.is_empty() {
+                body.push_str("(no macros — press n or p to add first slot)\n");
+            }
+            for (i, m) in app.config.macros.iter().enumerate() {
+                let marker = if i == app.macro_cursor { "> " } else { "  " };
+                let hex_tag = if m.hex { "[HEX]" } else { "[ASCII]" };
+                body.push_str(&format!(
+                    "{}F{:<2} {} {} : {}\n",
+                    marker, m.slot, hex_tag, m.name, m.payload
+                ));
+            }
+            if let Some(field) = app.macro_edit_field {
+                body.push_str(&format!(
+                    "\nEditing {:?}: {}\nEnter=commit  Esc=cancel\n",
+                    field, app.macro_edit_buf
+                ));
+            } else {
+                body.push_str("\n↑/↓ select  n=name  p=payload  h=toggle HEX  s=save  Esc=close\n");
+            }
+            let p = Paragraph::new(body)
+                .block(Block::default().borders(Borders::ALL).title("Macros"));
+            f.render_widget(p, r);
         }
         Modal::Search => {
             let text = app.search.clone().unwrap_or_default();

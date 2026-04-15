@@ -40,6 +40,26 @@ uart-mon --port COM3 --baud 9600
 | `Ctrl+F` | Search |
 | `F1`–`F12` | Send macro slot 1–12 |
 | `Esc` | Close modal |
+| `PageUp` / `PageDown` / `End` | Scroll RX |
+
+### Inside Settings (Ctrl+S)
+- `↑` / `↓` — select field
+- `←` / `→` — cycle value
+- `Enter` — apply to running worker + save to config file
+- `Esc` — cancel
+
+### Inside Macro editor (Ctrl+M)
+- `↑` / `↓` — select macro slot
+- `n` — edit name
+- `p` — edit payload
+- `h` — toggle HEX mode for that macro
+- `s` — save to config file
+- `Esc` — close
+
+### Inside Search (Ctrl+F)
+- type — live-filter RX lines
+- `Enter` — keep filter
+- `Esc` — cancel & clear
 
 ## Config & log paths
 

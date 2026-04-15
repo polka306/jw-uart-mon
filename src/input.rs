@@ -25,10 +25,57 @@ pub enum Action {
     SearchBackspace,
     SearchCommit,
     SearchCancel,
+    SettingsCursorUp,
+    SettingsCursorDown,
+    SettingsValuePrev,
+    SettingsValueNext,
+    SettingsApply,
+    MacroCursorUp,
+    MacroCursorDown,
+    MacroToggleHex,
+    MacroBeginEditName,
+    MacroBeginEditPayload,
+    MacroEditChar(char),
+    MacroEditBackspace,
+    MacroEditCommit,
+    MacroEditCancel,
+    MacroSave,
     None,
 }
 
 pub fn map_key(app: &AppState, key: KeyEvent) -> Action {
+    if app.modal == Modal::Settings {
+        return match key.code {
+            KeyCode::Esc => Action::CloseModal,
+            KeyCode::Up => Action::SettingsCursorUp,
+            KeyCode::Down => Action::SettingsCursorDown,
+            KeyCode::Left => Action::SettingsValuePrev,
+            KeyCode::Right => Action::SettingsValueNext,
+            KeyCode::Enter => Action::SettingsApply,
+            _ => Action::None,
+        };
+    }
+    if app.modal == Modal::MacroEditor {
+        if app.macro_edit_field.is_some() {
+            return match key.code {
+                KeyCode::Esc => Action::MacroEditCancel,
+                KeyCode::Enter => Action::MacroEditCommit,
+                KeyCode::Backspace => Action::MacroEditBackspace,
+                KeyCode::Char(c) => Action::MacroEditChar(c),
+                _ => Action::None,
+            };
+        }
+        return match key.code {
+            KeyCode::Esc => Action::CloseModal,
+            KeyCode::Up => Action::MacroCursorUp,
+            KeyCode::Down => Action::MacroCursorDown,
+            KeyCode::Char('n') => Action::MacroBeginEditName,
+            KeyCode::Char('p') => Action::MacroBeginEditPayload,
+            KeyCode::Char('h') => Action::MacroToggleHex,
+            KeyCode::Char('s') => Action::MacroSave,
+            _ => Action::None,
+        };
+    }
     if app.modal == Modal::Search {
         return match key.code {
             KeyCode::Esc => Action::SearchCancel,

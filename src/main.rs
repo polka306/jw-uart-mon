@@ -10,13 +10,18 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use uart_mon::{
-    app::{AppState, Direction as Dir, InputMode, LogLine, Modal, NoticeLevel},
-    config::{default_config_path, default_log_dir, Config},
+    app::{AppState, Direction as Dir, InputMode, LogLine, MacroField, Modal, NoticeLevel},
+    config::{default_config_path, default_log_dir, Config, FlowControl, LineEnding, Macro, Parity},
     input::{map_key, Action},
     log_writer::LogWriter,
     serial::{parse_hex_tx, LineSplitter, SerialEvent, SerialWorker, TxCommand},
     ui,
 };
+
+const BAUD_PRESETS: &[u32] = &[
+    1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600,
+];
+const SETTINGS_FIELDS: usize = 6;
 
 #[derive(Parser)]
 #[command(name = "uart-mon", version)]
@@ -88,7 +93,7 @@ fn main() -> Result<()> {
                 }
                 recv(key_rx) -> msg => {
                     if let Ok(k) = msg {
-                        handle_key(&mut app, k, &worker, &log_writer);
+                        handle_key(&mut app, k, &worker, &log_writer, cfg_path.as_deref());
                     }
                 }
                 recv(tick) -> _ => {}
@@ -134,7 +139,13 @@ fn handle_serial(
     }
 }
 
-fn handle_key(app: &mut AppState, k: KeyEvent, worker: &SerialWorker, lw: &LogWriter) {
+fn handle_key(
+    app: &mut AppState,
+    k: KeyEvent,
+    worker: &SerialWorker,
+    lw: &LogWriter,
+    cfg_path: Option<&std::path::Path>,
+) {
     let action = map_key(app, k);
     match action {
         Action::Quit => app.quit = true,
@@ -196,7 +207,138 @@ fn handle_key(app: &mut AppState, k: KeyEvent, worker: &SerialWorker, lw: &LogWr
         Action::ScrollUp => app.scroll_up(10),
         Action::ScrollDown => app.scroll_down(10),
         Action::ScrollBottom => app.scroll_bottom(),
+        Action::SettingsCursorUp => {
+            if app.settings_cursor == 0 { app.settings_cursor = SETTINGS_FIELDS - 1; }
+            else { app.settings_cursor -= 1; }
+        }
+        Action::SettingsCursorDown => {
+            app.settings_cursor = (app.settings_cursor + 1) % SETTINGS_FIELDS;
+        }
+        Action::SettingsValuePrev => cycle_setting(app, -1),
+        Action::SettingsValueNext => cycle_setting(app, 1),
+        Action::SettingsApply => {
+            let _ = worker.tx_cmd.send(TxCommand::ChangeConfig(app.config.serial.clone()));
+            if let Some(p) = cfg_path {
+                if let Err(e) = app.config.save(p) {
+                    app.set_notice(NoticeLevel::Error, format!("save: {}", e));
+                } else {
+                    app.set_notice(NoticeLevel::Info, "settings applied & saved");
+                }
+            } else {
+                app.set_notice(NoticeLevel::Info, "settings applied (not saved)");
+            }
+            app.modal = Modal::None;
+        }
+        Action::MacroCursorUp => {
+            let n = app.config.macros.len().max(1);
+            if app.macro_cursor == 0 { app.macro_cursor = n - 1; }
+            else { app.macro_cursor -= 1; }
+        }
+        Action::MacroCursorDown => {
+            let n = app.config.macros.len().max(1);
+            app.macro_cursor = (app.macro_cursor + 1) % n;
+        }
+        Action::MacroToggleHex => {
+            if let Some(m) = app.config.macros.get_mut(app.macro_cursor) {
+                m.hex = !m.hex;
+            }
+        }
+        Action::MacroBeginEditName => {
+            ensure_macro_slot(app);
+            app.macro_edit_field = Some(MacroField::Name);
+            app.macro_edit_buf = app.config.macros[app.macro_cursor].name.clone();
+        }
+        Action::MacroBeginEditPayload => {
+            ensure_macro_slot(app);
+            app.macro_edit_field = Some(MacroField::Payload);
+            app.macro_edit_buf = app.config.macros[app.macro_cursor].payload.clone();
+        }
+        Action::MacroEditChar(c) => app.macro_edit_buf.push(c),
+        Action::MacroEditBackspace => { app.macro_edit_buf.pop(); }
+        Action::MacroEditCommit => {
+            if let (Some(field), Some(m)) = (app.macro_edit_field, app.config.macros.get_mut(app.macro_cursor)) {
+                let buf = std::mem::take(&mut app.macro_edit_buf);
+                match field {
+                    MacroField::Name => m.name = buf,
+                    MacroField::Payload => m.payload = buf,
+                    MacroField::HexToggle => {}
+                }
+            }
+            app.macro_edit_field = None;
+        }
+        Action::MacroEditCancel => {
+            app.macro_edit_field = None;
+            app.macro_edit_buf.clear();
+        }
+        Action::MacroSave => {
+            if let Some(p) = cfg_path {
+                if let Err(e) = app.config.save(p) {
+                    app.set_notice(NoticeLevel::Error, format!("save: {}", e));
+                } else {
+                    app.set_notice(NoticeLevel::Info, "macros saved");
+                }
+            } else {
+                app.set_notice(NoticeLevel::Warn, "no config path; macros kept in memory only");
+            }
+        }
         Action::None => {}
+    }
+}
+
+fn cycle_setting(app: &mut AppState, dir: i32) {
+    let c = &mut app.config.serial;
+    match app.settings_cursor {
+        0 => {
+            // baud
+            let idx = BAUD_PRESETS.iter().position(|&b| b == c.baud).unwrap_or(0);
+            let new = wrap_cycle(idx, BAUD_PRESETS.len(), dir);
+            c.baud = BAUD_PRESETS[new];
+        }
+        1 => {
+            // data bits
+            let bits = [5u8, 6, 7, 8];
+            let idx = bits.iter().position(|&b| b == c.data_bits).unwrap_or(3);
+            c.data_bits = bits[wrap_cycle(idx, bits.len(), dir)];
+        }
+        2 => {
+            // parity
+            let vals = [Parity::None, Parity::Odd, Parity::Even];
+            let idx = vals.iter().position(|v| v == &c.parity).unwrap_or(0);
+            c.parity = vals[wrap_cycle(idx, vals.len(), dir)].clone();
+        }
+        3 => {
+            // stop bits
+            let vals = [1u8, 2];
+            let idx = vals.iter().position(|&v| v == c.stop_bits).unwrap_or(0);
+            c.stop_bits = vals[wrap_cycle(idx, vals.len(), dir)];
+        }
+        4 => {
+            // flow
+            let vals = [FlowControl::None, FlowControl::Software, FlowControl::Hardware];
+            let idx = vals.iter().position(|v| v == &c.flow).unwrap_or(0);
+            c.flow = vals[wrap_cycle(idx, vals.len(), dir)].clone();
+        }
+        5 => {
+            // line ending
+            let vals = [LineEnding::None, LineEnding::Cr, LineEnding::Lf, LineEnding::Crlf];
+            let idx = vals.iter().position(|v| v == &c.line_ending).unwrap_or(2);
+            c.line_ending = vals[wrap_cycle(idx, vals.len(), dir)].clone();
+        }
+        _ => {}
+    }
+}
+
+fn wrap_cycle(idx: usize, len: usize, dir: i32) -> usize {
+    if len == 0 { return 0; }
+    if dir >= 0 { (idx + 1) % len } else { (idx + len - 1) % len }
+}
+
+fn ensure_macro_slot(app: &mut AppState) {
+    if app.config.macros.is_empty() {
+        app.config.macros.push(Macro { slot: 1, name: String::new(), payload: String::new(), hex: false });
+    }
+    if app.macro_cursor >= app.config.macros.len() {
+        app.macro_cursor = app.config.macros.len() - 1;
     }
 }
 
