@@ -5,6 +5,7 @@ use crate::app::{AppState, Modal};
 pub enum Action {
     Quit,
     OpenModal(Modal),
+    OpenSearch,
     CloseModal,
     ToggleHex,
     ToggleTs,
@@ -20,10 +21,23 @@ pub enum Action {
     ScrollDown,
     ScrollBottom,
     SendMacro(u8),
+    SearchChar(char),
+    SearchBackspace,
+    SearchCommit,
+    SearchCancel,
     None,
 }
 
 pub fn map_key(app: &AppState, key: KeyEvent) -> Action {
+    if app.modal == Modal::Search {
+        return match key.code {
+            KeyCode::Esc => Action::SearchCancel,
+            KeyCode::Enter => Action::SearchCommit,
+            KeyCode::Backspace => Action::SearchBackspace,
+            KeyCode::Char(c) => Action::SearchChar(c),
+            _ => Action::None,
+        };
+    }
     if app.modal != Modal::None {
         return match key.code {
             KeyCode::Esc => Action::CloseModal,
@@ -36,7 +50,7 @@ pub fn map_key(app: &AppState, key: KeyEvent) -> Action {
         (KeyCode::Char('p'), true) => Action::OpenModal(Modal::PortPicker),
         (KeyCode::Char('s'), true) => Action::OpenModal(Modal::Settings),
         (KeyCode::Char('m'), true) => Action::OpenModal(Modal::MacroEditor),
-        (KeyCode::Char('f'), true) => Action::OpenModal(Modal::Search),
+        (KeyCode::Char('f'), true) => Action::OpenSearch,
         (KeyCode::Char('h'), true) => Action::ToggleHex,
         (KeyCode::Char('t'), true) => Action::ToggleTs,
         (KeyCode::Char('l'), true) => Action::ClearLog,

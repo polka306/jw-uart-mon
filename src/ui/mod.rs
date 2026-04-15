@@ -55,12 +55,29 @@ fn render_status(f: &mut Frame, app: &AppState, area: Rect) {
 
 fn render_rx(f: &mut Frame, app: &AppState, area: Rect) {
     let height = area.height.saturating_sub(2) as usize;
-    let total = app.lines.len();
+    let query = app.search.as_deref().filter(|q| !q.is_empty());
+
+    // Collect (filtered) line refs
+    let filtered: Vec<&crate::app::LogLine> = match query {
+        Some(q) => {
+            let q_lower = q.to_lowercase();
+            app.lines
+                .iter()
+                .filter(|l| {
+                    String::from_utf8_lossy(&l.bytes)
+                        .to_lowercase()
+                        .contains(&q_lower)
+                })
+                .collect()
+        }
+        None => app.lines.iter().collect(),
+    };
+    let total = filtered.len();
     let back = app.scroll.unwrap_or(0).min(total.saturating_sub(1));
     let end = total.saturating_sub(back);
     let start = end.saturating_sub(height);
     let mut out = Vec::new();
-    for line in app.lines.iter().take(end).skip(start) {
+    for line in filtered.iter().take(end).skip(start).copied() {
         let mut spans: Vec<Span> = Vec::new();
         if app.show_ts {
             spans.push(Span::styled(
@@ -87,9 +104,15 @@ fn render_rx(f: &mut Frame, app: &AppState, area: Rect) {
         }
         out.push(Line::from(spans));
     }
-    let title = match app.scroll {
-        None => "RX".to_string(),
-        Some(n) => format!("RX [scrolled -{} | End=resume]", n),
+    let title = {
+        let mut parts = vec!["RX".to_string()];
+        if let Some(q) = query {
+            parts.push(format!("filter: \"{}\" ({} matches)", q, total));
+        }
+        if let Some(n) = app.scroll {
+            parts.push(format!("scrolled -{}", n));
+        }
+        parts.join(" | ")
     };
     let block = Block::default().borders(Borders::ALL).title(title);
     f.render_widget(Paragraph::new(out).block(block), area);

@@ -44,8 +44,11 @@ pub fn render(f: &mut Frame, app: &AppState, area: Rect) {
         }
         Modal::Search => {
             let text = app.search.clone().unwrap_or_default();
-            let p = Paragraph::new(text)
-                .block(Block::default().borders(Borders::ALL).title("Search"));
+            let p = Paragraph::new(format!(
+                "Query: {}\n\nEnter=keep filter  Esc=cancel & clear",
+                text
+            ))
+            .block(Block::default().borders(Borders::ALL).title("Search (live filter)"));
             f.render_widget(p, r);
         }
         Modal::None => {}

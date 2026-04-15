@@ -139,7 +139,19 @@ fn handle_key(app: &mut AppState, k: KeyEvent, worker: &SerialWorker, lw: &LogWr
     match action {
         Action::Quit => app.quit = true,
         Action::OpenModal(m) => app.modal = m,
+        Action::OpenSearch => {
+            app.modal = Modal::Search;
+            if app.search.is_none() { app.search = Some(String::new()); }
+        }
         Action::CloseModal => app.modal = Modal::None,
+        Action::SearchChar(c) => {
+            if let Some(s) = app.search.as_mut() { s.push(c); }
+        }
+        Action::SearchBackspace => {
+            if let Some(s) = app.search.as_mut() { s.pop(); }
+        }
+        Action::SearchCommit => { app.modal = Modal::None; }
+        Action::SearchCancel => { app.modal = Modal::None; app.search = None; }
         Action::ToggleHex => app.show_hex = !app.show_hex,
         Action::ToggleTs => app.show_ts = !app.show_ts,
         Action::ClearLog => app.clear_lines(),
