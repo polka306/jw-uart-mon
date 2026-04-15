@@ -120,8 +120,8 @@ fn render_rx(f: &mut Frame, app: &AppState, area: Rect) {
 
 fn render_input(f: &mut Frame, app: &AppState, area: Rect) {
     let title = match app.input_mode {
-        InputMode::Ascii => "Input (Enter=send, Ctrl+X=HEX)",
-        InputMode::Hex => "Input HEX (Enter=send)",
+        InputMode::Ascii => "Input (Enter=send, Ctrl+X=HEX, Ctrl+G=help)",
+        InputMode::Hex => "Input HEX (Enter=send, Ctrl+G=help)",
     };
     let p = Paragraph::new(format!("> {}", app.input))
         .block(Block::default().borders(Borders::ALL).title(title));

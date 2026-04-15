@@ -35,7 +35,8 @@ uart-mon --port COM3 --baud 9600
 | `Ctrl+H` | Toggle HEX/ASCII |
 | `Ctrl+T` | Toggle timestamps |
 | `Ctrl+S` | Settings |
-| `Ctrl+M` | Macro editor |
+| `Ctrl+K` | Macro editor |
+| `Ctrl+G` | Help / keybindings modal |
 | `Ctrl+X` | Toggle HEX TX input |
 | `Ctrl+F` | Search |
 | `F1`–`F12` | Send macro slot 1–12 |

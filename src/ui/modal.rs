@@ -7,7 +7,8 @@ use crate::app::{AppState, Modal};
 
 pub fn render(f: &mut Frame, app: &AppState, area: Rect) {
     if app.modal == Modal::None { return; }
-    let r = centered(area, 60, 40);
+    let (w, h) = if app.modal == Modal::Help { (70, 90) } else { (60, 40) };
+    let r = centered(area, w, h);
     f.render_widget(Clear, r);
     match app.modal {
         Modal::PortPicker => {
@@ -72,6 +73,56 @@ pub fn render(f: &mut Frame, app: &AppState, area: Rect) {
                 text
             ))
             .block(Block::default().borders(Borders::ALL).title("Search (live filter)"));
+            f.render_widget(p, r);
+        }
+        Modal::Help => {
+            let body = "\
+Global
+  Ctrl+Q        quit
+  Ctrl+G        this help
+  Ctrl+P        port picker
+  Ctrl+S        settings (editable)
+  Ctrl+K        macro editor
+  Ctrl+F        search / filter
+  Ctrl+R        reconnect
+  Ctrl+L        clear RX log
+  Ctrl+H        toggle HEX/ASCII display
+  Ctrl+T        toggle timestamps
+  Ctrl+X        toggle HEX TX input mode
+
+Input
+  Enter         send
+  Backspace     delete char
+  Up / Down     TX history
+
+RX view
+  PageUp/Down   scroll
+  End           jump to bottom
+
+Macros
+  F1..F12       send macro slot 1..12
+
+Settings modal
+  Up/Down       select field
+  Left/Right    cycle value
+  Enter         apply & save
+  Esc           cancel
+
+Macro modal
+  Up/Down       select slot
+  n / p         edit name / payload
+  h             toggle HEX mode
+  s             save to file
+  Esc           close / cancel edit
+
+Search modal
+  type          live filter
+  Enter         keep filter
+  Esc           cancel & clear
+
+Esc closes any modal.";
+            let p = Paragraph::new(body)
+                .block(Block::default().borders(Borders::ALL).title("Help (Esc to close)"));
             f.render_widget(p, r);
         }
         Modal::None => {}

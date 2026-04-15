@@ -18,7 +18,7 @@ pub enum NoticeLevel { Info, Warn, Error }
 pub struct Notice { pub level: NoticeLevel, pub text: String, pub at: DateTime<Local> }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Modal { None, PortPicker, Settings, MacroEditor, Search }
+pub enum Modal { None, PortPicker, Settings, MacroEditor, Search, Help }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode { Ascii, Hex }
